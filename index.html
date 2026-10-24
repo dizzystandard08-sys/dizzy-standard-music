@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dizzy Standard Music</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: #080b16;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+header {
+    text-align: center;
+    padding: 35px 15px;
+    background: linear-gradient(135deg, #101d45, #6828a0);
+}
+
+header h1 {
+    font-size: 29px;
+    letter-spacing: 2px;
+    margin: 0;
+}
+
+nav {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px 8px;
+    background: #12172a;
+    flex-wrap: wrap;
+}
+
+button {
+    border: none;
+    border-radius: 8px;
+    padding: 12px 15px;
+    background: #8055e8;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.secondary { background: #30374d; }
+.delete { background: #dc2626; }
+
+main {
+    max-width: 850px;
+    margin: auto;
+    padding: 20px 14px;
+}
+
+h2 { color: #c4b5fd; }
+
+#status, .message {
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.song {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: #141a2e;
+    padding: 14px;
+    border-radius: 12px;
+    margin: 15px 0;
+}
+
+.song img {
+    width: 90px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.song-info {
+    flex: 1;
+    min-width: 150px;
+}
+
+.song-info h3 { margin: 0 0 8px; }
+
+.song-info p { color: #c1c7d7; }
+
+audio {
+    width: 100%;
+    margin: 8px 0;
+}
+
+.download {
+    display: inline-block;
+    padding: 10px 13px;
+    background: #16a34a;
+    color: white;
+    border-radius: 7px;
+    text-decoration: none;
+    margin-top: 5px;
+}
+
+.panel {
+    display: none;
+    background: #141a2e;
+    padding: 18px;
+    border-radius: 12px;
+    margin-top: 20px;
+}
+
+input {
+    width: 100%;
+    display: block;
+    margin: 9px 0 16px;
+    padding: 12px;
+    background: #080b16;
+    color: white;
+    border: 1px solid #39415c;
+    border-radius: 7px;
+}
+
+label { display: block; }
+
+footer {
+    text-align: center;
+    padding: 25px;
+    color: #aaa;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>DIZZY STANDARD</h1>
+    <p>Music • Motivation • Life</p>
+    <p>Welcome to my official music website!</p>
+</header>
+
+<nav>
+    <button type="button" onclick="showLibrary()">🎵 Music Library</button>
+    <button type="button" class="secondary" onclick="showLogin()">🔐 Admin Login</button>
+</nav>
+
+<main>
+
+<section id="library">
+    <h2>🎵 Music Library</h2>
+    <p>Listen to and download my songs.</p>
+    <p id="status">Connecting to music library...</p>
+    <div id="songs"></div>
+</section>
+
+<section id="loginPanel" class="panel">
+    <h2>Admin Login</h2>
+    <p>Sign in with your registered Supabase email and password.</p>
+
+    <form id="loginForm">
+        <label for="email">Email</label>
+        <input id="email" type="email" required>
+
+        <label for="password">Password</label>
+        <input id="password" type="password" required>
+
+        <button type="submit">Log In</button>
+    </form>
+
+    <p id="loginStatus" class="message"></p>
+</section>
+
+<section id="adminPanel" class="panel">
+    <h2>Admin Dashboard</h2>
+    <p>Upload and manage your music here.</p>
+
+    <form id="uploadForm">
+        <label for="title">Song title</label>
+        <input id="title" required>
+
+        <label for="artist">Artist</label>
+        <input id="artist" value="Dizzy Standard" required>
+
+        <label for="audioFile">Audio file</label>
+        <input id="audioFile" type="file" accept="audio/*" required>
+
+        <label for="coverFile">Cover image (optional)</label>
+        <input id="coverFile" type="file" accept="image/*">
+
+        <button type="submit">Upload Song</button>
+    </form>
+
+    <p id="uploadStatus" class="message"></p>
+
+    <h3>Manage Songs</h3>
+    <div id="adminSongs"></div>
+
+    <button type="button" class="secondary" onclick="logout()">Log Out</button>
+</section>
+
+</main>
+
+<footer>
+    <p>© <span id="year"></span> Dizzy Standard</p>
+    <p>Thank you for listening!</p>
+</footer>
+
+<script>
+(function () {
+"use strict";
+
+const URL = "https://xqbpefcmenelrkciqjps.supabase.co";
+const KEY = "sb_publishable_PIDSnqe38T9y42IJiWXP3Q_rLcoSnbl";
+
+let db = null;
+
+const status = document.getElementById("status");
+const songs = document.getElementById("songs");
+
+document.getElementById("year").textContent = new Date().getFullYear();
+
+window.showLibrary = function () {
+    document.getElementById("library").style.display = "block";
+    document.getElementById("loginPanel").style.display = "none";
+    document.getElementById("adminPanel").style.display = "none";
+};
+
+window.showLogin = function () {
+    document.getElementById("library").style.display = "block";
+    document.getElementById("loginPanel").style.display = "block";
+    document.getElementById("adminPanel").style.display = "none";
+};
+
+function publicURL(bucket, path) {
+    if (!path) return "";
+    if (path.startsWith("https://")) return path;
+
+    return URL + "/storage/v1/object/public/" +
+        bucket + "/" +
+        path.split("/").map(encodeURIComponent).join("/");
+}
+
+async function loadSongs() {
+    status.textContent = "Loading songs...";
+    songs.replaceChildren();
+
+    try {
+        const result = await db
+            .from("songs")
+            .select("id,title,artist,audio_path,cover_path,created_at")
+            .order("created_at", { ascending: false });
+
+        if (result.error) throw result.error;
+
+        if (!result.data || result.data.length === 0) {
+            status.textContent = "No songs uploaded yet.";
+            return;
+        }
+
+        status.textContent = result.data.length + " song(s) available.";
+
+        result.data.forEach(function (song) {
+            const card = document.createElement("div");
+            card.className = "song";
+
+            if (song.cover_path) {
+                const image = document.createElement("img");
+                /* CORRECTED BUCKET NAME */
+                image.src = publicURL("cover", song.cover_path);
+                image.alt = "Song cover";
+                card.appendChild(image);
+            }
+
+            const info = document.createElement("div");
+            info.className = "song-info";
+
+            const title = document.createElement("h3");
+            title.textContent = song.title;
+
+            const artist = document.createElement("p");
+            artist.textContent = song.artist;
+
+            info.appendChild(title);
+            info.appendChild(artist);
+
+            if (song.audio_path) {
+                const audio = document.createElement("audio");
+                audio.controls = true;
+                audio.preload = "none";
+
+                /* CORRECTED BUCKET NAME */
+                audio.src = publicURL("Music", song.audio_path);
+
+                info.appendChild(audio);
+
+                const download = document.createElement("a");
+                download.className = "download";
+
+                /* CORRECTED BUCKET NAME */
+                download.href = publicURL("Music", song.audio_path);
+
+                download.download = "";
+                download.textContent = "Download Song";
+                download.target = "_blank";
+                download.rel = "noopener";
+                info.appendChild(download);
+            }
+
+            card.appendChild(info);
+            songs.appendChild(card);
+        });
+
+    } catch (error) {
+        console.error(error);
+        status.textContent = "Error loading songs: " + error.message;
+    }
+}
+
+async function checkAdmin() {
+    const sessionResult = await db.auth.getSession();
+    const session = sessionResult.data.session;
+
+    if (!session) return false;
+
+    const result = await db
+        .from("admin_users")
+        .select("user_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+    if (result.error) throw result.error;
+    return Boolean(result.data);
+}
+
+async function refreshAdminSongs() {
+    const container = document.getElementById("adminSongs");
+    container.replaceChildren();
+
+    const result = await db
+        .from("songs")
+        .select("id,title")
+        .order("created_at", { ascending: false });
+
+    if (result.error) throw result.error;
+
+    result.data.forEach(function (song) {
+        const row = document.createElement("div");
+        row.className = "song";
+
+        const name = document.createElement("span");
+        name.textContent = song.title;
+        name.style.flex = "1";
+
+        const button = document.createElement("button");
+        button.className = "delete";
+        button.textContent = "Delete";
+
+        button.onclick = async function () {
+            if (!confirm("Delete " + song.title + "?")) return;
+
+            const result = await db
+                .from("songs")
+                .delete()
+                .eq("id", song.id);
+
+            if (result.error) {
+                alert("Delete failed: " + result.error.message);
+                return;
+            }
+
+            await loadSongs();
+            await refreshAdminSongs();
+        };
+
+        row.appendChild(name);
+        row.appendChild(button);
+        container.appendChild(row);
+    });
+}
+
+document.getElementById("loginForm").onsubmit = async function (event) {
+    event.preventDefault();
+
+    const message = document.getElementById("loginStatus");
+    message.textContent = "Signing in...";
+
+    try {
+        const result = await db.auth.signInWithPassword({
+            email: document.getElementById("email").value.trim(),
+            password: document.getElementById("password").value
+        });
+
+        if (result.error) throw result.error;
+
+        if (!(await checkAdmin())) {
+            await db.auth.signOut();
+            throw new Error("This account is not registered as an admin.");
+        }
+
+        document.getElementById("loginPanel").style.display = "none";
+        document.getElementById("adminPanel").style.display = "block";
+        message.textContent = "";
+
+        await refreshAdminSongs();
+
+    } catch (error) {
+        message.textContent = "Login failed: " + error.message;
+    }
+};
+
+document.getElementById("uploadForm").onsubmit = async function (event) {
+    event.preventDefault();
+
+    const message = document.getElementById("uploadStatus");
+    message.textContent = "Uploading...";
+
+    try {
+        if (!(await checkAdmin())) {
+            throw new Error("Please log in as admin.");
+        }
+
+        const title = document.getElementById("title").value.trim();
+        const artist = document.getElementById("artist").value.trim();
+        const audioFile = document.getElementById("audioFile").files[0];
+        const coverFile = document.getElementById("coverFile").files[0];
+
+        if (!audioFile) throw new Error("Choose an audio file.");
+
+        const unique = Date.now() + "_" +
+            Math.random().toString(36).slice(2, 8);
+
+        const safe = function (name) {
+            return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        };
+
+        const audioPath = unique + "_" + safe(audioFile.name);
+
+        const audioUpload = await db.storage
+            .from("Music")
+            .upload(audioPath, audioFile);
+
+        if (audioUpload.error) throw audioUpload.error;
+
+        let coverPath = "";
+
+        if (coverFile) {
+            coverPath = unique + "_" + safe(coverFile.name);
+
+            const coverUpload = await db.storage
+                .from("cover")
+                .upload(coverPath, coverFile);
+
+            if (coverUpload.error) throw coverUpload.error;
+        }
+
+        const insert = await db.from("songs").insert({
+            title: title,
+            artist: artist,
+            audio_path: audioPath,
+            cover_path: coverPath
+        });
+
+        if (insert.error) throw insert.error;
+
+        message.textContent = "Song uploaded successfully!";
+        document.getElementById("uploadForm").reset();
+
+        await loadSongs();
+        await refreshAdminSongs();
+
+    } catch (error) {
+        message.textContent = "Upload failed: " + error.message;
+    }
+};
+
+window.logout = async function () {
+    await db.auth.signOut();
+    document.getElementById("adminPanel").style.display = "none";
+    document.getElementById("loginPanel").style.display = "none";
+    window.showLibrary();
+};
+
+function startWebsite() {
+    if (!window.supabase) {
+        status.textContent =
+            "Supabase library failed to load. Check internet and refresh.";
+        return;
+    }
+
+    db = window.supabase.createClient(URL, KEY);
+    loadSongs();
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startWebsite);
+} else {
+    startWebsite();
+}
+
+})();
+</script>
+
+</body>
+  </html>
